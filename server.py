@@ -70,6 +70,8 @@ def init_face():
         bucket = storage.bucket()
         blob = bucket.blob(fileName)
         blob.upload_from_filename(fileName)
+        os.remove(fileName)
+
 
     return jsonify({'valid': True, 'message': 'gui thanh cong'})
 
