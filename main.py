@@ -50,7 +50,7 @@ bucket = storage.bucket()
 # cap.set(3, 640)
 # cap.set(4, 480)
 
-# imgBackground = cv2.imread('Resources/background.png')
+imgBackground = cv2.imread('Resources/background.png')
 
 
 

@@ -17,15 +17,19 @@ from firebase_admin import credentials
 from firebase_admin import storage
 from firebase_admin import db
 
+from PIL import Image
+from io import BytesIO
+
 app = Flask(__name__)
 CORS(app)
-UserId = 0
+UserId = -1
 
 cred = credentials.Certificate("serviceAccountKey.json")
 firebase_admin.initialize_app(cred, {
     'databaseURL': 'https://faceattendancerealtime-c6597-default-rtdb.asia-southeast1.firebasedatabase.app/',
     'storageBucket': 'faceattendancerealtime-c6597.appspot.com'
 })
+
 
 def findEncodings(imagesList):
     encodeList = []
@@ -36,22 +40,21 @@ def findEncodings(imagesList):
 
     return encodeList
 
-@app.route('/api/init_face', methods=['POST'])
-def init_face():
-    # Check if the request contains an image file
-    if 'image' not in request.files:
-        return jsonify({'valid': False, 'message': 'No image provided'})
-    # Decode the base64-encoded image to a binary format
-    image_data = base64.b64decode(request.form['image'])
-    # Open the image file using Pillow
-    image = Image.open(BytesIO(image_data))
-    # Generate a unique 6-bit ID for the image file
-    image_id = secrets.randbits(6)
-    UserId = image_id
-    # Save the image to a file in the 'Images' folder with the unique ID as the filename
-    save_path = os.path.join('Images', f'{image_id}.png')
-    image.save(save_path)
 
+@app.route('/api/init_face', methods=["POST"], strict_slashes=False)
+def init_face():
+    image_data = request.json['image_data']
+    # Remove the prefix using string slicing
+    b64_image = image_data[22:]
+    # Decode the Base64 string to bytes
+    imgdata = base64.b64decode(b64_image)
+    image_id = secrets.randbits(6)
+    filename = f'{image_id}.png'
+    # Save the image to a file
+    with open(os.path.join('Images', filename), 'wb') as f:
+        f.write(imgdata)
+
+    # return jsonify({'valid': True, 'message': 'Image uploaded successfully'})
     # Importting student imgs
     folderPath = 'Images'
     pathList = os.listdir(folderPath)  # ['321654.png', '852741.png', '963852.png']
@@ -79,30 +82,23 @@ def init_face():
     print("file saved")
 
 
-@app.route('/api/is_image_valid', methods=['POST'])
+@app.route('/api/is_image_valid', methods=['POST'], strict_slashes=False)
 def is_image_valid():
-    # Check if the request contains an image file
-    if 'image' not in request.files:
-        return jsonify({'valid': False, 'message': 'No image provided'})
-    # Decode the base64-encoded image to a binary format
-    image_data = base64.b64decode(request.form['image'])
+    image_data = request.json['image_data']
+    # Remove the prefix using string slicing
+    b64_image = image_data[22:]
+    # Decode the Base64 string to bytes
+    imgdata = base64.b64decode(b64_image)
+    image_id = secrets.randbits(6)
+    loadedImageFilename = f'{image_id}.png'
+    # Save the image to a file
+    with open(loadedImageFilename, 'wb') as f:
+        f.write(imgdata)
     # Open the image file using Pillow
-    image = Image.open(BytesIO(image_data))
+    image = cv2.imread(loadedImageFilename)
 
     # Check if the image is valid
-    try:
-        # xu ly anh
-        response = checkImage(image)
-        return jsonify({'valid': response})
-    except:
-        return jsonify({'valid': False, 'message': 'Invalid image file'})
-
-
-if __name__ == '__main__':
-    app.run()
-
-
-def checkImage(image):
+    # xu ly anh
     # load the encoding file
     print('loading encode file...')
     file = open("EncodeFile.p", 'rb')
@@ -111,23 +107,30 @@ def checkImage(image):
     encodeListKnown, studentIds = encodeListKnownWithIds
     # print(studentIds)
     print('encode file loaded')
-
+    # img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     faceCurFrame = face_recognition.face_locations(img)
     encodeCurFrame = face_recognition.face_encodings(img, faceCurFrame)  # encode phan mat tren webcam
+    # delete file not used anymore
+    if os.path.exists(loadedImageFilename):
+        os.remove(loadedImageFilename)
+    else:
+        print("The file does not exist")
+
+    jsonReturn = jsonify({'valid': False, 'message': 'Khong trung'})
     for encodeFace, faceLoc in zip(encodeCurFrame, faceCurFrame):
         matches = face_recognition.compare_faces(encodeListKnown, encodeFace)
         faceDis = face_recognition.face_distance(encodeListKnown, encodeFace)
-        # print("matches",matches)
-        # print("faceDis",faceDis) #facedis cang thap thi cang giong
-
+        print("matches", matches)
+        print("faceDis", faceDis)  # facedis cang thap thi cang giong
         matchIndex = np.argmin(faceDis)
         if matches[matchIndex]:
-            # print("known face detected")
-            # print(studentIds[matchIndex])
-            id = studentIds[matchIndex]
-            if id != UserId:
-                return False
-            else:
-                return True
+            print("known face detected")
+            print(studentIds[matchIndex])
+            jsonReturn = jsonify({'valid': True, 'message': 'Trung'})
 
+    return jsonReturn
+
+
+if __name__ == '__main__':
+    app.run()
